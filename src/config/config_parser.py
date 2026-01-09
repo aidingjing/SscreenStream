@@ -71,6 +71,7 @@ class ConfigData:
 
     # 服务器配置
     server_port: int
+    server_path: str  # WebSocket 路由路径，默认 "/"
     host: str
 
     # FFmpeg 配置
@@ -177,6 +178,7 @@ class ConfigParser:
         # 服务器配置默认值
         config.setdefault("server", {})
         config["server"].setdefault("port", ConfigValidator.DEFAULT_SERVER_PORT)
+        config["server"].setdefault("path", "/")  # 默认路径（向后兼容）
         config["server"].setdefault("host", ConfigValidator.DEFAULT_HOST)
 
         # FFmpeg 配置默认值
@@ -281,6 +283,7 @@ class ConfigParser:
         # 解析服务器配置
         server_config = config["server"]
         server_port = server_config["port"]
+        server_path = server_config.get("path", "/")  # 向后兼容，默认为 "/"
         host = server_config["host"]
 
         # 解析 FFmpeg 配置
@@ -309,6 +312,7 @@ class ConfigParser:
 
         return ConfigData(
             server_port=server_port,
+            server_path=server_path,
             host=host,
             ffmpeg_path=ffmpeg_path,
             video_codec=video_codec,

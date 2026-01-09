@@ -220,7 +220,7 @@ class MainWindow(QMainWindow):
 
         # 设置列
         columns = [
-            "#", "实例名称", "状态", "端口", "源类型",
+            "#", "实例名称", "状态", "端口", "路径", "源类型",
             "客户端", "运行时间", "操作"
         ]
         table.setColumnCount(len(columns))
@@ -231,10 +231,11 @@ class MainWindow(QMainWindow):
         table.setColumnWidth(1, 150)  # 实例名称
         table.setColumnWidth(2, 100)  # 状态
         table.setColumnWidth(3, 80)   # 端口
-        table.setColumnWidth(4, 120)  # 源类型
-        table.setColumnWidth(5, 80)   # 客户端
-        table.setColumnWidth(6, 100)  # 运行时间
-        table.setColumnWidth(7, 150)  # 操作
+        table.setColumnWidth(4, 120)  # 路径（新增）
+        table.setColumnWidth(5, 120)  # 源类型
+        table.setColumnWidth(6, 80)   # 客户端
+        table.setColumnWidth(7, 100)  # 运行时间
+        table.setColumnWidth(8, 150)  # 操作
 
         # 最后一列自动拉伸
         header = table.horizontalHeader()
@@ -304,19 +305,22 @@ class MainWindow(QMainWindow):
             # 端口
             self.table.setItem(row, 3, QTableWidgetItem(str(info.port)))
 
+            # 路径（新增）
+            self.table.setItem(row, 4, QTableWidgetItem(info.path))
+
             # 源类型
-            self.table.setItem(row, 4, QTableWidgetItem(info.source_type))
+            self.table.setItem(row, 5, QTableWidgetItem(info.source_type))
 
             # 客户端数量
-            self.table.setItem(row, 5, QTableWidgetItem(str(info.client_count)))
+            self.table.setItem(row, 6, QTableWidgetItem(str(info.client_count)))
 
             # 运行时间
             uptime_str = self._format_uptime(info.uptime)
-            self.table.setItem(row, 6, QTableWidgetItem(uptime_str))
+            self.table.setItem(row, 7, QTableWidgetItem(uptime_str))
 
             # 操作按钮
             actions_widget = self._create_actions_widget(info)
-            self.table.setCellWidget(row, 7, actions_widget)
+            self.table.setCellWidget(row, 8, actions_widget)
 
         # 更新状态栏统计
         self._update_status_bar()
@@ -429,9 +433,14 @@ class MainWindow(QMainWindow):
 
     def _on_add_config(self):
         """添加配置"""
+        # 获取所有现有配置（用于模板选择）
+        existing_configs = self.config_manager.get_all_configs()
+
         # 创建配置对话框
         dialog = ConfigDialog(
             config_dir=str(self.config_manager.config_dir),
+            config_manager=self.config_manager,  # 新增：传递配置管理器
+            existing_configs=existing_configs,  # 新增：传递现有配置列表
             parent=self,
             logger=self.logger
         )

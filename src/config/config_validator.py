@@ -103,6 +103,26 @@ class ConfigValidator:
             if not isinstance(host, str):
                 raise ConfigValidationError("主机地址必须是字符串")
 
+        # 验证路径
+        if "path" in server:
+            path = server["path"]
+            if not isinstance(path, str):
+                raise ConfigValidationError("路径必须是字符串")
+            if not path.startswith("/"):
+                raise ConfigValidationError(
+                    f"路径必须以 / 开头，当前值: {path}"
+                )
+            # 检查路径安全性（防止路径遍历）
+            if ".." in path:
+                raise ConfigValidationError(
+                    f"路径不能包含 ..（防止路径遍历攻击），当前值: {path}"
+                )
+            # 检查非法字符
+            if any(char in path for char in [" ", "\\", "\n", "\r", "\t"]):
+                raise ConfigValidationError(
+                    f"路径不能包含空格或特殊字符，当前值: {path}"
+                )
+
     def _validate_ffmpeg_config(self, config: Dict[str, Any]) -> None:
         """验证 FFmpeg 配置
 

@@ -37,6 +37,7 @@ class ConfigMetadata:
     # 配置摘要（用于UI显示）
     source_type: Optional[str] = None
     port: Optional[int] = None
+    server_path: Optional[str] = None  # WebSocket 路由路径
 
 
 class ConfigManager:
@@ -125,6 +126,7 @@ class ConfigManager:
             # 提取配置摘要
             source_type = config_data.source.source.type if config_data.source else None
             port = config_data.server_port
+            server_path = config_data.server_path
 
             return ConfigMetadata(
                 name=instance_name,
@@ -134,7 +136,8 @@ class ConfigManager:
                 modified_at=modified_at,
                 is_valid=True,
                 source_type=source_type,
-                port=port
+                port=port,
+                server_path=server_path
             )
 
         except Exception as e:
@@ -395,3 +398,37 @@ class ConfigManager:
                 callback(event_type, config_name)
             except Exception as e:
                 self.logger.error(f"回调函数执行失败: {e}")
+
+    def check_path_conflict(
+        self,
+        port: int,
+        path: str,
+        exclude_name: Optional[str] = None
+    ) -> Optional[str]:
+        """检查路径冲突
+
+        Args:
+            port: 端口号
+            path: 路径
+            exclude_name: 排除的配置名称（用于编辑时排除自己）
+
+        Returns:
+            Optional[str]: 如果冲突，返回占用者名称；否则返回 None
+        """
+        # 路径不区分大小写
+        path_lower = path.lower()
+
+        for config_name, metadata in self._configs.items():
+            # 排除自己
+            if exclude_name and config_name == exclude_name:
+                continue
+
+            # 检查端口和路径是否都相同
+            if (
+                metadata.port == port
+                and metadata.server_path
+                and metadata.server_path.lower() == path_lower
+            ):
+                return config_name
+
+        return None

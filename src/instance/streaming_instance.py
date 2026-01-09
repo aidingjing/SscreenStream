@@ -36,6 +36,7 @@ class InstanceInfo:
     name: str
     status: InstanceStatus
     port: int
+    path: str  # WebSocket 路由路径
     source_type: str
     client_count: int = 0
     uptime: Optional[float] = None
@@ -118,6 +119,7 @@ class StreamingInstance:
             name=self.name,
             status=self._status,
             port=self.port,
+            path=self.config.server_path,  # 添加路径信息
             source_type=self.config.source.source.type,
             client_count=client_count,
             uptime=uptime,

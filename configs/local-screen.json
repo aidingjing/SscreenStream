@@ -3,7 +3,8 @@
   "description": "本地全屏录制",
   "server": {
     "port": 8765,
-    "host": "0.0.0.0"
+    "host": "0.0.0.0",
+    "path": "/"
   },
   "ffmpeg": {
     "video_codec": "libx264",

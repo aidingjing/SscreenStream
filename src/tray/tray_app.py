@@ -201,7 +201,47 @@ class TrayApp:
     def _on_add_config(self) -> None:
         """添加配置菜单项处理"""
         self.logger.info("添加配置")
-        # TODO: 实现添加配置对话框
+
+        try:
+            from src.gui.config_dialog import ConfigDialog
+            from PyQt5.QtWidgets import QApplication
+
+            # 获取 QApplication 实例
+            app = QApplication.instance()
+            if not app:
+                self.logger.error("QApplication 未初始化，无法显示配置对话框")
+                return
+
+            # 获取所有现有配置（用于模板选择）
+            existing_configs = self.config_manager.get_all_configs()
+
+            # 在主线程中显示配置对话框
+            dialog = ConfigDialog(
+                config_dir=str(self.config_manager.config_dir),
+                config_manager=self.config_manager,
+                existing_configs=existing_configs,
+                logger=self.logger
+            )
+
+            # 连接信号：配置添加后刷新实例列表
+            dialog.config_added.connect(self._on_config_added)
+
+            # 显示对话框
+            dialog.exec_()
+
+        except ImportError:
+            self.logger.error("PyQt5 未安装，无法显示配置对话框")
+        except Exception as e:
+            self.logger.error(f"显示配置对话框失败: {e}", exc_info=True)
+
+    def _on_config_added(self, name: str) -> None:
+        """配置添加成功处理
+
+        Args:
+            name: 配置名称
+        """
+        self.logger.info(f"配置已添加: {name}")
+        # TODO: 可以在这里刷新实例列表或通知主窗口
 
     def _on_start_all(self) -> None:
         """启动所有实例菜单项处理"""
