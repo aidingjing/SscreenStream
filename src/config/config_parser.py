@@ -46,9 +46,23 @@ class WindowSourceConfig:
 
 
 @dataclass
+class NetworkStreamSourceConfig:
+    """网络流录制源配置
+
+    支持 RTSP、RTMP、HTTP-FLV 等网络流协议
+    """
+    type: str  # 必须为 "network_stream"
+    url: str  # 网络流 URL (rtsp://, rtmp://, http://, https://)
+    transport: Optional[str] = None  # 传输协议: tcp, udp, auto
+    timeout: Optional[int] = None  # 超时时间（微秒）
+    reconnect_delay: Optional[int] = None  # 重连延迟（秒）
+    max_reconnect_attempts: Optional[int] = None  # 最大重连次数
+
+
+@dataclass
 class SourceConfig:
     """统一录制源配置"""
-    source: Union[ScreenSourceConfig, WindowSourceConfig]
+    source: Union[ScreenSourceConfig, WindowSourceConfig, NetworkStreamSourceConfig]
 
 
 @dataclass
@@ -326,6 +340,8 @@ class ConfigParser:
             source = self._parse_screen_source(source_dict)
         elif source_type in ["window", "window_bg", "window_region"]:
             source = self._parse_window_source(source_dict)
+        elif source_type == "network_stream":
+            source = self._parse_network_stream_source(source_dict)
         else:
             raise ConfigValidationError(f"不支持的录制源类型: {source_type}")
 
@@ -385,4 +401,31 @@ class ConfigParser:
             region=region,
             force_render=source_dict.get("force_render", False),
             restore_position=source_dict.get("restore_position", True)
+        )
+
+    def _parse_network_stream_source(self, source_dict: Dict[str, Any]) -> NetworkStreamSourceConfig:
+        """解析网络流录制源配置
+
+        Args:
+            source_dict: 录制源配置字典
+
+        Returns:
+            NetworkStreamSourceConfig: 网络流录制源配置对象
+        """
+        # URL 是必需的
+        if "url" not in source_dict or not source_dict["url"]:
+            raise ConfigValidationError("网络流源必须提供 url 字段")
+
+        # 应用默认值
+        # transport: 默认 tcp（更可靠）
+        # timeout: 默认 5000000 微秒（5 秒）
+        # reconnect_delay: 默认 5 秒
+        # max_reconnect_attempts: 默认 3 次
+        return NetworkStreamSourceConfig(
+            type=source_dict["type"],
+            url=source_dict["url"],
+            transport=source_dict.get("transport", "tcp"),
+            timeout=source_dict.get("timeout", 5000000),
+            reconnect_delay=source_dict.get("reconnect_delay", 5),
+            max_reconnect_attempts=source_dict.get("max_reconnect_attempts", 3)
         )

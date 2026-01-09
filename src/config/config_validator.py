@@ -196,7 +196,7 @@ class ConfigValidator:
             raise ConfigValidationError("source 配置缺少 type 字段")
 
         source_type = source["type"]
-        valid_types = ["screen", "window", "window_bg", "window_region"]
+        valid_types = ["screen", "window", "window_bg", "window_region", "network_stream"]
 
         if source_type not in valid_types:
             raise ConfigValidationError(
@@ -209,6 +209,8 @@ class ConfigValidator:
             self._validate_screen_source(source)
         elif source_type in ["window", "window_bg", "window_region"]:
             self._validate_window_source(source)
+        elif source_type == "network_stream":
+            self._validate_network_stream_source(source)
 
     def _validate_screen_source(self, source: Dict[str, Any]) -> None:
         """验证屏幕录制源配置
@@ -292,6 +294,62 @@ class ConfigValidator:
             if region["width"] <= 0 or region["height"] <= 0:
                 raise ConfigValidationError(
                     "区域的宽度和高度必须大于 0"
+                )
+
+    def _validate_network_stream_source(self, source: Dict[str, Any]) -> None:
+        """验证网络流录制源配置
+
+        Args:
+            source: 录制源配置
+
+        Raises:
+            ConfigValidationError: 网络流录制源配置无效
+        """
+        # URL 是必需的
+        if "url" not in source or not source["url"]:
+            raise ConfigValidationError("网络流源必须提供 url 字段")
+
+        url = source["url"]
+
+        # 验证 URL 格式（必须以支持的协议开头）
+        supported_protocols = ["rtsp://", "rtmp://", "http://", "https://"]
+        if not any(url.startswith(protocol) for protocol in supported_protocols):
+            raise ConfigValidationError(
+                f"不支持的 URL 协议，支持的协议: {', '.join(supported_protocols)}"
+            )
+
+        # 验证传输协议（如果提供）
+        if "transport" in source and source["transport"] is not None:
+            transport = source["transport"]
+            valid_transports = ["tcp", "udp", "auto"]
+            if transport not in valid_transports:
+                raise ConfigValidationError(
+                    f"无效的传输协议: {transport}，"
+                    f"支持的协议: {', '.join(valid_transports)}"
+                )
+
+        # 验证超时时间（如果提供）
+        if "timeout" in source and source["timeout"] is not None:
+            timeout = source["timeout"]
+            if not isinstance(timeout, int) or timeout <= 0:
+                raise ConfigValidationError(
+                    f"超时时间必须是正整数（微秒），当前值: {timeout}"
+                )
+
+        # 验证重连延迟（如果提供）
+        if "reconnect_delay" in source and source["reconnect_delay"] is not None:
+            delay = source["reconnect_delay"]
+            if not isinstance(delay, int) or delay <= 0:
+                raise ConfigValidationError(
+                    f"重连延迟必须是正整数（秒），当前值: {delay}"
+                )
+
+        # 验证最大重连次数（如果提供）
+        if "max_reconnect_attempts" in source and source["max_reconnect_attempts"] is not None:
+            attempts = source["max_reconnect_attempts"]
+            if not isinstance(attempts, int) or attempts < 0:
+                raise ConfigValidationError(
+                    f"最大重连次数必须是非负整数，当前值: {attempts}"
                 )
 
     def _validate_process_config(self, config: Dict[str, Any]) -> None:

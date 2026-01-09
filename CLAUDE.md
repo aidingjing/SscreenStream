@@ -1,3 +1,22 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -440,6 +459,32 @@ config/config.json          # 实际配置文件（需自行创建）
 }
 ```
 
+**network_stream** - 网络流录制（NEW!）
+```json
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtsp://username:password@192.168.1.100:554/stream1",
+    "transport": "tcp",
+    "timeout": 5000000,
+    "reconnect_delay": 5,
+    "max_reconnect_attempts": 3
+  }
+}
+```
+
+支持的协议：
+- **RTSP** - IP 摄像头常用协议（`rtsp://`）
+- **RTMP** - 直播推流协议（`rtmp://`）
+- **HTTP/HTTPS** - HTTP-FLV 流（`http://`, `https://`）
+
+配置参数说明：
+- `url` - 网络流地址（必需）
+- `transport` - 传输协议：`tcp`（默认，更可靠）、`udp`（低延迟）、`auto`
+- `timeout` - 超时时间（微秒），默认 5000000（5 秒）
+- `reconnect_delay` - 重连延迟（秒），默认 5
+- `max_reconnect_attempts` - 最大重连次数，默认 3
+
 ## 测试策略
 
 ### 测试组织
@@ -490,6 +535,7 @@ pytest -m windows           # Windows 平台测试
 - `"type": "screen"` - 屏幕录制
 - `"type": "window"` - 窗口录制
 - `"type": "window_region"` - 窗口区域录制
+- `"type": "network_stream"` - 网络流录制（RTSP/RTMP/HTTP-FLV）
 
 ### Q3: 如何找到窗口标题？
 
@@ -531,6 +577,46 @@ python -m src.main --list-windows
 - 依赖帧（P-frame、B-frame）
 
 这确保新客户端连接时能立即接收完整的关键帧，避免播放黑屏或花屏。
+
+### Q9: 如何配置网络流源（RTSP/RTMP）？
+
+**A:** 网络流源配置示例：
+
+**RTSP 摄像头（TCP 传输）：**
+```json
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtsp://admin:password@192.168.1.100:554/stream1",
+    "transport": "tcp"
+  }
+}
+```
+
+**RTMP 直播流：**
+```json
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtmp://a.rtmp.youtube.com/live2/stream_key"
+  }
+}
+```
+
+**HTTP-FLV 流：**
+```json
+{
+  "source": {
+    "type": "network_stream",
+    "url": "http://example.com/live/stream.flv"
+  }
+}
+```
+
+**常见问题：**
+- 连接超时：增加 `timeout` 参数（默认 5000000 微秒）
+- 网络不稳定：使用 `transport: "tcp"` 提高可靠性
+- 频繁断线：增加 `reconnect_delay` 和 `max_reconnect_attempts`
 
 ## 项目结构
 

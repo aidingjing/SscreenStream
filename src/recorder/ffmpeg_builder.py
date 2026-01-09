@@ -10,7 +10,8 @@ import logging
 from src.config.config_parser import (
     ConfigData,
     ScreenSourceConfig,
-    WindowSourceConfig
+    WindowSourceConfig,
+    NetworkStreamSourceConfig
 )
 from src.exceptions import RecorderStartupError
 
@@ -22,7 +23,8 @@ class FFmpegCommandBuilder:
     1. 根据配置构建 FFmpeg 命令行参数
     2. 支持屏幕录制（gdigrab）
     3. 支持窗口录制
-    4. 支持区域录制
+    4. 支持网络流录制（RTSP、RTMP、HTTP-FLV）
+    5. 支持区域录制
     """
 
     def __init__(
@@ -55,6 +57,16 @@ class FFmpegCommandBuilder:
         # 输入参数（录制源）
         cmd.extend(self._build_input_args())
 
+        # 检查是否是网络流
+        is_network_stream = isinstance(self.config.source.source, NetworkStreamSourceConfig)
+
+        if is_network_stream:
+            # 网络流：添加流映射参数
+            # -map 0:v:0 映射第一个视频流（必需）
+            # -map 0:a? 映射音频流（可选，不存在则忽略）
+            cmd.extend(["-map", "0:v:0"])
+            cmd.extend(["-map", "0:a?"])
+
         # 视频编码参数
         cmd.extend(self._build_video_args())
 
@@ -77,18 +89,28 @@ class FFmpegCommandBuilder:
         args = []
         source = self.config.source.source
 
-        # 基础参数
-        args.extend([
-            "-f", "gdigrab",
-            "-framerate", str(self.config.framerate),
-            "-rtbufsize", "100M"  # 缓冲区大小，避免丢帧
-        ])
-
         # 根据源类型构建参数
         if isinstance(source, ScreenSourceConfig):
+            # 屏幕录制：使用 gdigrab
+            args.extend([
+                "-f", "gdigrab",
+                "-framerate", str(self.config.framerate),
+                "-rtbufsize", "100M"  # 缓冲区大小，避免丢帧
+            ])
             args.extend(self._build_screen_input(source))
         elif isinstance(source, WindowSourceConfig):
+            # 窗口录制：使用 gdigrab
+            args.extend([
+                "-f", "gdigrab",
+                "-framerate", str(self.config.framerate),
+                "-rtbufsize", "100M"
+            ])
             args.extend(self._build_window_input(source))
+        elif isinstance(source, NetworkStreamSourceConfig):
+            # 网络流录制：不需要 -f 参数，由 URL 协议决定
+            args.extend(self._build_network_stream_input(source))
+        else:
+            raise RecorderStartupError(f"不支持的录制源类型: {type(source)}")
 
         return args
 
@@ -174,6 +196,77 @@ class FFmpegCommandBuilder:
 
         return args
 
+    def _build_network_stream_input(self, stream_config: NetworkStreamSourceConfig) -> List[str]:
+        """构建网络流录制输入参数
+
+        支持 RTSP、RTMP、HTTP-FLV 等网络流协议
+
+        Args:
+            stream_config: 网络流源配置
+
+        Returns:
+            List[str]: FFmpeg 输入参数列表
+
+        Raises:
+            RecorderStartupError: 网络流配置无效
+        """
+        args = []
+
+        # 添加缓冲区大小（网络流优化）
+        args.extend(["-buffer_size", "32768000"])  # 32MB 缓冲区
+
+        # 添加分析时长和探测大小（加快流启动）
+        args.extend(["-analyzeduration", "1000000"])  # 分析 1 秒
+        args.extend(["-probesize", "5000000"])  # 探测 5MB
+        args.extend(["-max_delay", "0"])  # 最小化延迟
+
+        # 添加超时参数（所有协议通用）
+        if stream_config.timeout:
+            args.extend(["-timeout", str(stream_config.timeout)])
+
+        # 根据协议添加特定参数
+        url = stream_config.url.lower()
+
+        if url.startswith("rtsp://"):
+            # RTSP 协议特定参数
+            if stream_config.transport:
+                # 传输协议：tcp、udp、auto
+                args.extend(["-rtsp_transport", stream_config.transport])
+
+            # 添加 RTSP 特定优化
+            args.extend(["-rtsp_flags", "prefer_tcp"])  # 优先使用 TCP
+            args.extend(["-fflags", "+genpts+nobuffer"])  # 生成 PTS，不缓冲
+            args.extend(["-flags", "low_delay"])  # 低延迟标志
+
+            self.logger.info(f"RTSP 流配置: transport={stream_config.transport}")
+
+        elif url.startswith("rtmp://"):
+            # RTMP 协议特定参数
+            args.extend(["-fflags", "+genpts+nobuffer"])
+            args.extend(["-flags", "low_delay"])
+            self.logger.info("RTMP 流配置")
+
+        elif url.startswith("http://") or url.startswith("https://"):
+            # HTTP 协议特定参数
+            # 可以添加自定义 HTTP 头
+            args.extend(["-headers", "User-Agent: Mozilla/5.0"])
+            args.extend(["-fflags", "+genpts+nobuffer"])
+
+            # HTTP 重连参数（仅 HTTP 支持）
+            if stream_config.reconnect_delay and stream_config.max_reconnect_attempts:
+                args.extend(["-reconnect", "1"])
+                args.extend(["-reconnect_streamed", "1"])
+                args.extend(["-reconnect_delay_max", str(stream_config.reconnect_delay)])
+
+            self.logger.info("HTTP-FLV 流配置")
+
+        # 添加输入源 URL
+        args.extend(["-i", stream_config.url])
+
+        self.logger.info(f"网络流 URL: {stream_config.url}")
+
+        return args
+
     def _build_video_args(self) -> List[str]:
         """构建视频编码参数
 
@@ -208,6 +301,8 @@ class FFmpegCommandBuilder:
 
     def _build_audio_args(self) -> List[str]:
         """构建音频编码参数
+
+        网络流和本地录制都使用相同的音频编码参数
 
         示例: ["-c:a", "aac", "-b:a", "128k"]
         """

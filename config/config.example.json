@@ -26,3 +26,92 @@
     "file": "screen-streamer.log"
   }
 }
+
+/*
+=== 录制源类型配置说明 ===
+
+支持以下录制源类型 (source.type):
+
+1. "screen" - 屏幕录制（默认）
+   {
+     "source": {
+       "type": "screen",
+       "display_index": 1,        // 显示器索引（从1开始）
+       "region": null             // 可选：录制区域 {"x": 0, "y": 0, "width": 1920, "height": 1080}
+     }
+   }
+
+2. "window" - 窗口录制
+   {
+     "source": {
+       "type": "window",
+       "window_title": "Notepad", // 窗口标题（支持子字符串匹配）
+       "find_by_substring": true, // 是否使用子字符串匹配（默认 false）
+       "region": null             // 可选：录制窗口区域
+     }
+   }
+
+3. "window_region" - 窗口区域录制
+   {
+     "source": {
+       "type": "window_region",
+       "window_title": "Notepad",
+       "region": {               // 必需：录制窗口内的区域
+         "x": 0,
+         "y": 0,
+         "width": 800,
+         "height": 600
+       }
+     }
+   }
+
+4. "network_stream" - 网络流录制（NEW!）
+   {
+     "source": {
+       "type": "network_stream",
+       "url": "rtsp://username:password@192.168.1.100:554/stream1",
+                                // 网络流 URL（支持 rtsp://, rtmp://, http://, https://）
+       "transport": "tcp",       // 可选：传输协议（tcp, udp, auto），默认 tcp
+       "timeout": 5000000,       // 可选：超时时间（微秒），默认 5000000（5秒）
+       "reconnect_delay": 5,     // 可选：重连延迟（秒），默认 5
+       "max_reconnect_attempts": 3 // 可选：最大重连次数，默认 3
+     }
+   }
+
+=== 网络流源使用示例 ===
+
+RTSP 摄像头（TCP 传输）:
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtsp://admin:password123@192.168.1.100:554/stream1",
+    "transport": "tcp"
+  }
+}
+
+RTSP 摄像头（UDP 传输，低延迟）:
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtsp://192.168.1.100:554/stream1",
+    "transport": "udp",
+    "timeout": 3000000
+  }
+}
+
+RTMP 直播流:
+{
+  "source": {
+    "type": "network_stream",
+    "url": "rtmp://a.rtmp.youtube.com/live2/stream_key"
+  }
+}
+
+HTTP-FLV 流:
+{
+  "source": {
+    "type": "network_stream",
+    "url": "http://example.com/live/stream.flv"
+  }
+}
+*/
