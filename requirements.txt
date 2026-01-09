@@ -1,0 +1,23 @@
+# WebSocket Screen Streamer - Python 依赖
+
+# WebSocket 服务器（原方案，保留）
+websockets==11.0
+
+# Flask-WebSocket（新方案，用于更好的 WebSocket 管理）
+flask==3.0.0
+flask-sock==0.7.0
+
+# HTTP 服务器（可选，用于 HTTP-FLV）
+# aiohttp==3.9.1
+
+# JSON 验证（可选）
+jsonschema>=4.0.0
+
+# 注意：asyncio 是 Python 3.7+ 内置模块，无需额外安装
+
+# =====================================
+# 测试依赖（单独安装）
+# =====================================
+# 运行测试需要额外安装：
+# pip install -r requirements-dev.txt
+#

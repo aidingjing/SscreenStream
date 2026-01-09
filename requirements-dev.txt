@@ -1,0 +1,17 @@
+# WebSocket Screen Streamer - 测试依赖
+
+# 测试框架
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+
+# 代码覆盖率
+coverage==7.3.2
+
+# 代码质量
+pylint==3.0.3
+flake8==6.1.0
+
+# 类型检查
+mypy==1.7.1

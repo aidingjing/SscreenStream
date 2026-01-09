@@ -1,0 +1,28 @@
+{
+  "server": {
+    "port": 8765,
+    "host": "0.0.0.0"
+  },
+  "ffmpeg": {
+    "video_codec": "libx264",
+    "audio_codec": "aac",
+    "bitrate": "2M",
+    "framerate": 30,
+    "preset": "ultrafast",
+    "tune": "zerolatency"
+  },
+  "source": {
+    "type": "screen",
+    "display_index": 1,
+    "region": null
+  },
+  "process": {
+    "crash_threshold": 3,
+    "crash_window": 60,
+    "shutdown_timeout": 30
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "screen-streamer.log"
+  }
+}
