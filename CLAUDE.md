@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **核心特性：**
 - 按需启动：第一个客户端连接时才启动 FFmpeg，节省资源
 - 自动关闭：所有客户端断开后自动关闭 FFmpeg
-- 多源支持：屏幕、窗口、窗口区域录制
+- 多源支持：屏幕、窗口、窗口区域、网络流（RTSP/RTMP/HTTP）录制
 - 崩溃恢复：滑动窗口算法监控 FFmpeg 崩溃并自动重启
 - WebSocket 推流：使用 WebSocket 实时推送 FLV 视频流
 
@@ -38,19 +38,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - WebSocket (websockets + Flask-Sock)
 - asyncio (异步编程)
 
-## 环境设置
+## 快速开始
 
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
-# 安装生产依赖
 pip install -r requirements.txt
-
-# 安装开发依赖（测试、代码检查）
-pip install -r requirements-dev.txt
 ```
 
-### FFmpeg 安装
+### 2. 安装 FFmpeg
 
 **Windows:**
 1. 下载 FFmpeg: https://ffmpeg.org/download.html
@@ -58,16 +54,73 @@ pip install -r requirements-dev.txt
 
 **Linux:**
 ```bash
-# Ubuntu/Debian
 sudo apt-get install ffmpeg
-
-# CentOS/RHEL
-sudo yum install ffmpeg
 ```
 
 **macOS:**
 ```bash
 brew install ffmpeg
+```
+
+### 3. 创建配置文件
+
+```bash
+# 复制示例配置
+cp config/config.example.json config/config.json
+
+# 根据需要编辑配置
+notepad config/config.json  # Windows
+# 或
+vim config/config.json      # Linux/Mac
+```
+
+### 4. 运行程序
+
+```bash
+python -m src.main
+```
+
+### 5. 连接客户端
+
+使用 WebSocket 客户端连接到 `ws://localhost:8765`（默认端口），接收 FLV 视频流。
+
+**HTML 播放示例：**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.bootcdn.net/ajax/libs/flv.js/1.6.2/flv.min.js"></script>
+</head>
+<body>
+  <video id="videoElement" controls autoplay></video>
+  <script>
+    const flvPlayer = flvjs.createPlayer({
+      type: 'flv',
+      url: 'ws://localhost:8765'
+    });
+    flvPlayer.attachMediaElement(videoElement);
+    flvPlayer.load();
+    flvPlayer.play();
+  </script>
+</body>
+</html>
+```
+
+### 常用参数
+
+```bash
+# 指定配置文件
+python -m src.main --config config/config.json
+
+# 列出所有可见窗口（辅助功能）
+python -m src.main --list-windows
+```
+
+### 开发环境设置
+
+**安装开发依赖（测试、代码检查）：**
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ## 常用命令
@@ -229,6 +282,75 @@ mypy src/
 - `ProcessManagerError`: 进程管理错误
 - `WindowNotFoundError`: 窗口未找到错误
 - `StreamError`: 推流错误
+
+## 延迟启动机制（核心特性）
+
+项目的核心设计理念是**按需启动**，即只有在有客户端连接时才启动 FFmpeg 进程，所有客户端断开后自动关闭 FFmpeg。
+
+### 为什么需要延迟启动？
+
+1. **节省资源**：FFmpeg 进程占用约 100-200MB 内存，无客户端时不应该浪费资源
+2. **降低功耗**：持续录制会消耗 CPU，延迟启动可减少不必要的计算
+3. **延长硬件寿命**：避免长时间运行导致的硬件磨损
+4. **灵活性**：支持多个推流服务器共享同一个 FFmpeg 进程
+
+### 延迟启动实现细节
+
+**第一个客户端连接时：**
+```
+客户端连接 → ClientManager 添加客户端
+           → 检测到 client_count == 1
+           → 启动 FFmpeg 录制器
+           → 启动 StreamForwarder
+           → 开始向所有客户端推流
+```
+
+**更多客户端连接时：**
+```
+客户端连接 → ClientManager 添加客户端
+           → 检测到 client_count > 1
+           → 复用现有 FFmpeg 进程（不重启）
+           → 新客户端立即接收流数据
+```
+
+**客户端断开时：**
+```
+客户端断开 → ClientManager 移除客户端
+           → 检测到是否为空
+           → 如果不空，继续推流
+           → 如果为空，启动关闭定时器（默认 30 秒）
+```
+
+**超时关闭机制：**
+```
+所有客户端断开 → 启动 30 秒倒计时
+               → 期间有新客户端连接 → 取消关闭，继续推流
+               → 30 秒内无新客户端 → 停止 StreamForwarder
+                                   → 停止 FFmpeg 进程
+                                   → 返回监听状态
+```
+
+### 为什么需要 30 秒超时？
+
+1. **避免频繁重启**：FFmpeg 启动约需 1-3 秒，频繁重启会影响用户体验
+2. **临时断线重连**：客户端可能因网络波动临时断线，需要快速重连
+3. **用户体验**：用户刷新页面或切换标签时不应立即中断流
+
+### 配置参数
+
+在配置文件的 `process` 字段中：
+```json
+{
+  "process": {
+    "shutdown_timeout": 30  // 客户端断开后等待时间（秒）
+  }
+}
+```
+
+**建议值：**
+- 开发环境：5-10 秒（快速反馈）
+- 生产环境：30-60 秒（稳定体验）
+- 高并发场景：60-120 秒（减少重启频率）
 
 ## 核心工作流
 
@@ -487,18 +609,20 @@ config/config.json          # 实际配置文件（需自行创建）
 
 ## 测试策略
 
+**注意：** 测试文件正在开发中。目前 `tests/` 目录下只有 `fixtures/` 子目录，具体的测试文件（`test_*.py`）尚未创建。
+
 ### 测试组织
 
 ```
 tests/
-├── unit/           # 单元测试
+├── unit/           # 单元测试（待实现）
 │   ├── test_config.py
 │   ├── test_recorder.py
 │   ├── test_process.py
 │   └── test_streamer.py
-├── integration/    # 集成测试
+├── integration/    # 集成测试（待实现）
 │   └── test_integration_*.py
-├── conftest.py     # pytest 配置和 fixtures
+├── conftest.py     # pytest 配置和 fixtures（待实现）
 └── fixtures/       # 测试数据
     └── configs/    # 测试配置文件
 ```
@@ -564,10 +688,49 @@ python -m src.main --list-windows
 
 ### Q7: 支持哪些推流协议？
 
-**A:** 项目支持三种推流服务器：
-1. **WebSocketStreamer** - 纯 WebSocket 推流（websockets 库）
-2. **HybridStreamer** - 混合推流（HTTP-FLV + WebSocket-FLV）
-3. **FlaskWsServer** - Flask 集成 WebSocket 推流（Flask-Sock）
+**A:** 项目支持三种推流服务器，选择取决于使用场景：
+
+**1. WebSocketStreamer（推荐）**
+- **适用场景**：纯 WebSocket 推流，最轻量
+- **优点**：性能最好，内存占用最低
+- **缺点**：仅支持 WebSocket 协议
+- **依赖**：websockets 库
+- **使用**：`from src.streamer.ws_server import WebSocketStreamer`
+
+**2. HybridStreamer**
+- **适用场景**：需要同时支持 HTTP-FLV 和 WebSocket-FLV
+- **优点**：兼容性最好，支持多种播放器
+- **缺点**：资源占用较高
+- **依赖**：websockets + aiohttp
+- **使用**：`from src.streamer.hybrid_streamer import HybridStreamer`
+
+**3. FlaskWsServer**
+- **适用场景**：需要与 Flask 应用集成（如 Web 管理后台）
+- **优点**：可与 Flask 路由、认证、中间件集成
+- **缺点**：性能略低于纯 WebSocket 实现
+- **依赖**：Flask + Flask-Sock
+- **使用**：`from src.streamer.flask_ws_server import FlaskWsServer`
+
+**选择建议：**
+- 独立推流服务 → WebSocketStreamer
+- 需要兼容多种播放器 → HybridStreamer
+- 有 Web 管理界面 → FlaskWsServer
+
+**如何切换推流服务器：**
+修改 `src/main.py` 中的导入和实例化：
+```python
+# 使用 WebSocketStreamer（默认）
+from src.streamer.ws_server import WebSocketStreamer
+server = WebSocketStreamer(config, recorder, logger)
+
+# 或使用 HybridStreamer
+from src.streamer.hybrid_streamer import HybridStreamer
+server = HybridStreamer(config, recorder, logger)
+
+# 或使用 FlaskWsServer
+from src.streamer.flask_ws_server import FlaskWsServer
+server = FlaskWsServer(config, recorder, logger)
+```
 
 ### Q8: GOP 缓冲是什么？
 
@@ -663,15 +826,29 @@ screen/
 │
 ├── ffmpeg/                      # FFmpeg 可执行文件（需手动放置）
 │
+├── openspec/                    # OpenSpec 变更提案和规范管理
+│   ├── AGENTS.md                # OpenSpec 使用指南
+│   ├── project.md               # 项目上下文和规范
+│   ├── specs/                   # 功能规格说明
+│   └── changes/                 # 变更提案
+│
 ├── requirements.txt             # 生产依赖
 ├── requirements-dev.txt         # 开发依赖
 ├── pytest.ini                   # pytest 配置
 ├── run_tests.py                 # 测试运行脚本
 ├── .gitignore                   # Git 忽略规则
+├── AGENTS.md                    # OpenSpec 指令（与 CLAUDE.md 同步）
 ├── CLAUDE.md                    # 项目文档（本文件）
 │
 └── screen-streamer.log          # 日志文件（运行时生成）
 ```
+
+**重要文件说明：**
+- `CLAUDE.md` - 项目主文档（本文档），面向 Claude Code AI 助手
+- `AGENTS.md` - OpenSpec 指令块，与 CLAUDE.md 保持同步
+- `openspec/project.md` - 详细的项目上下文、技术栈、架构规范
+- `openspec/AGENTS.md` - OpenSpec 工作流程和最佳实践
+- `src/*/CLAUDE.md` - 各模块的详细文档
 
 ## 模块级文档
 
@@ -680,6 +857,46 @@ screen/
 - [进程管理模块](src/process/CLAUDE.md) - 进程管理、健康监控、崩溃检测
 - [推流模块](src/streamer/CLAUDE.md) - WebSocket 服务器、客户端管理、流转发
 - [工具模块](src/utils/CLAUDE.md) - 日志配置、路径处理
+
+## OpenSpec 工作流程
+
+项目使用 **OpenSpec** 进行变更提案和规范管理。
+
+### 何时使用 OpenSpec
+
+在以下情况下，应先创建 OpenSpec 变更提案：
+- 提及规划或提案（proposal、spec、change、plan 等关键词）
+- 引入新功能、破坏性变更、架构调整或重大的性能/安全工作
+- 需求模糊，需要权威规范才能开始编码
+
+### OpenSpec 命令
+
+```bash
+# 查看帮助
+openspec --help
+
+# 创建新变更提案
+openspec new <change-id>
+
+# 应用变更提案
+openspec apply <change-id>
+
+# 归档已完成的变更提案
+openspec archive <change-id>
+
+# 列出所有变更提案
+openspec list
+
+# 更新项目规范
+openspec update
+```
+
+### 相关文档
+
+- `openspec/AGENTS.md` - OpenSpec 使用指南
+- `openspec/project.md` - 项目上下文和规范
+- `openspec/specs/` - 功能规格说明
+- `openspec/changes/` - 变更提案
 
 ## 开发指南
 

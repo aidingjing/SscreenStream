@@ -13,6 +13,19 @@ flask-sock==0.7.0
 # JSON 验证（可选）
 jsonschema>=4.0.0
 
+# Windows 托盘应用
+pystray>=0.19.5
+Pillow>=10.0.0
+
+# GUI 框架
+PyQt5>=5.15.9
+
+# 打包工具
+pyinstaller>=5.13.0
+
+# 文件监听（配置热加载）
+watchfiles>=0.20.0
+
 # 注意：asyncio 是 Python 3.7+ 内置模块，无需额外安装
 
 # =====================================

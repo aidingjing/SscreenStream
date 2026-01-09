@@ -1,0 +1,30 @@
+{
+  "server": {
+    "port": 8765,
+    "host": "0.0.0.0"
+  },
+  "ffmpeg": {
+    "video_codec": "libx264",
+    "audio_codec": "aac",
+    "bitrate": "2M",
+    "framerate": 30,
+    "preset": "ultrafast",
+    "tune": "zerolatency"
+  },
+  "source": {
+    "type": "network_stream",
+    "url": "rtmp://a.rtmp.youtube.com/live2/stream_key",
+    "timeout": 10000000,
+    "reconnect_delay": 10,
+    "max_reconnect_attempts": 5
+  },
+  "process": {
+    "crash_threshold": 3,
+    "crash_window": 60,
+    "shutdown_timeout": 30
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "screen-streamer.log"
+  }
+}

@@ -20,6 +20,36 @@ from src.recorder.window_helper import WindowHelper
 from src.streamer.ws_server import WebSocketStreamer
 from src.utils.logger import setup_logger
 
+# 多实例支持
+from src.config.config_manager import ConfigManager
+from src.instance.instance_manager import InstanceManager
+from src.tray.tray_app import TrayApp
+
+
+def safe_print(*args, **kwargs):
+    """安全打印函数，处理 Windows GBK 编码问题"""
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        # 如果编码失败，使用 errors='ignore' 参数重试
+        import io
+        from contextlib import redirect_stdout
+
+        # 捕获输出并使用替代字符
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print(*args, **kwargs)
+
+        # 尝试使用替代字符编码
+        try:
+            text = output.getvalue()
+            # 将 emoji 和其他特殊字符替换为 ASCII 替代
+            text = text.encode('gbk', errors='replace').decode('gbk')
+            print(text, **kwargs)
+        except:
+            # 如果还是失败，使用最简单的方式
+            print("信息输出（编码错误）", **kwargs)
+
 
 async def main():
     """主函数"""
@@ -44,13 +74,13 @@ async def main():
     config_path = args.config
 
     # 2. 加载并验证配置
-    print(f"📋 加载配置文件: {config_path}")
+    safe_print(f"📋 加载配置文件: {config_path}")
     try:
         parser = ConfigParser(config_path)
         config = parser.parse()
-        print(f"✅ 配置加载成功")
+        safe_print(f"✅ 配置加载成功")
     except Exception as e:
-        print(f"❌ 配置加载失败: {e}")
+        safe_print(f"❌ 配置加载失败: {e}")
         sys.exit(1)
 
     # 3. 初始化日志
@@ -132,14 +162,20 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 使用默认配置文件
-  python main.py
+  # 使用默认配置文件（单实例模式）
+  python -m src.main
 
   # 指定配置文件
-  python main.py --config config/config.json
+  python -m src.main --config config/config.json
+
+  # 托盘模式（多实例管理）
+  python -m src.main --tray
+
+  # 托盘模式，指定配置目录
+  python -m src.main --tray --config-dir configs
 
   # 列出所有窗口
-  python main.py --list-windows
+  python -m src.main --list-windows
         """
     )
 
@@ -147,7 +183,26 @@ def parse_args() -> argparse.Namespace:
         "--config",
         type=str,
         default="config/config.example.json",
-        help="配置文件路径（默认: config/config.example.json）"
+        help="配置文件路径（单实例模式，默认: config/config.example.json）"
+    )
+
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="启动托盘应用模式（多实例管理）"
+    )
+
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="configs",
+        help="配置文件目录（托盘模式，默认: configs）"
+    )
+
+    parser.add_argument(
+        "--hidden",
+        action="store_true",
+        help="隐藏主窗口（仅托盘模式，需要配合 --tray 使用）"
     )
 
     parser.add_argument(
@@ -230,6 +285,80 @@ def list_windows_command():
         sys.exit(1)
 
 
+def run_tray_mode(config_dir: str, hidden: bool = False) -> None:
+    """运行托盘应用模式
+
+    Args:
+        config_dir: 配置文件目录
+        hidden: 是否隐藏主窗口
+    """
+    safe_print(f"🚀 启动托盘应用模式")
+    safe_print(f"📁 配置目录: {config_dir}")
+
+    # 初始化日志
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    try:
+        # 1. 先在主线程创建 QApplication（PyQt5 必须在主线程）
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+            app.setQuitOnLastWindowClosed(False)  # 关闭窗口不退出应用
+
+        # 2. 创建配置管理器
+        config_manager = ConfigManager(config_dir, logger)
+
+        # 3. 扫描配置
+        configs = config_manager.scan_configs()
+        safe_print(f"✅ 找到 {len(configs)} 个配置文件")
+
+        # 4. 创建实例管理器
+        instance_manager = InstanceManager(config_manager, logger=logger)
+
+        # 5. 创建托盘应用
+        tray_app = TrayApp(config_manager, instance_manager, logger)
+
+        # 6. 在单独线程中运行托盘图标（因为 tray_app.run() 是阻塞的）
+        import threading
+        tray_thread = threading.Thread(
+            target=tray_app.run,
+            daemon=True
+        )
+        tray_thread.start()
+        safe_print(f"✅ 托盘图标已启动")
+
+        # 7. 如果不隐藏，显示主窗口
+        if not hidden:
+            tray_app._show_main_window()
+            safe_print(f"✅ 主窗口已显示")
+
+        safe_print(f"💡 右键托盘图标查看菜单")
+        safe_print(f"💡 双击托盘图标显示/隐藏主窗口")
+
+        # 8. 在主线程运行 Qt 事件循环（阻塞）
+        # 这样 PyQt5 就在主线程中运行了
+        app.exec_()
+
+        # 9. Qt 事件循环结束后，停止托盘应用
+        tray_app.stop()
+        logger.info("托盘应用已退出")
+
+    except ImportError as e:
+        safe_print(f"❌ 缺少依赖库: {e}")
+        safe_print(f"💡 请运行: pip install pystray Pillow PyQt5")
+        sys.exit(1)
+    except Exception as e:
+        safe_print(f"❌ 托盘应用启动失败: {e}")
+        logger.error("托盘应用异常", exc_info=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     # 解析参数
     args = parse_args()
@@ -239,7 +368,12 @@ if __name__ == "__main__":
         list_windows_command()
         sys.exit(0)
 
-    # 主程序
+    # 托盘模式
+    if args.tray:
+        run_tray_mode(args.config_dir, args.hidden)
+        sys.exit(0)
+
+    # 单实例模式（原有逻辑）
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
